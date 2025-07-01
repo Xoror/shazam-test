@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="row mt-3">
+            <form id="form" onsubmit="return submitForm()">
+                <div class="mb-3 col-12">
+                    <label class="form-label" for="name">Name</label>
+                    <input id="name" name="name" class="form-control form-control-sm" required />
+                </div>
+                <div class="mb-3 col-12">
+                    <label class="form-label" for="image">Image</label>
+                    <input multiple type="file" accept="image/*" id="image" name="image" class="form-control form-control-sm" required />
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-sm btn-primary">Submit</button>
+                </div>
+            </form>
+            <div id="alert" class="alert mt-3 d-none">
+                <p></p>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-auto">
+                <button id="start-record" class="btn btn-sm btn-primary">Record</button>
+            </div>
+            <div class="col-auto">
+                <button id="submit-record" class="btn btn-sm btn-primary">Submit Recording</button>
+            </div>
+            <div id="recorded-audio" class="col-12 mt-2 d-none">
+
+            </div>
+        </div>
+    </div>
+    <script>
+        function submitForm() {
+            let form = document.getElementById('form')
+            let data = new FormData(form)
+            console.log(data)
+            fetch('submit', {
+                method: 'POST',
+                body: data
+            }).then(res => {
+                res.json().then(result => {
+                    let alert = document.getElementById('alert')
+                    let innerText, src
+                    alert.classList.remove('d-none')
+                    if(result.ok) {
+                        innerText = `Upload success!\nName: ${result.name}\nImage: ${result.image}`
+                        src = result.image.map(img => `/uploads/${img}`)
+                        alert.classList.add("alert-success")
+                    }
+                    else {
+                        innerText = result.message
+                        src = []
+                        alert.classList.add("alert-warning")
+                    }
+                    alert.children[0].innerText = innerText
+                    src.forEach(source => {
+                        if(result.fileType.includes("image/")) {
+                            let img = document.createElement('img')
+                            img.src = source
+                            img.width = 200
+                            alert.appendChild(img)
+                        } else if (result.fileType.includes("audio/")) {
+                            let audio = document.createElement('audio')
+                            audio.controls = true
+                            let sourceEl = document.createElement("source")
+                            sourceEl.src = source
+                            sourceEl.type = result.fileType
+                            audio.appendChild(sourceEl)
+                            alert.appendChild(audio)
+                        }
+                    });
+                    
+                    form.reset()
+                })
+            })
+            return false
+        }
+        const startRecord = document.getElementById("start-record")
+        const submitRecord = document.getElementById("submit-record")
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            console.log("getUserMedia supported.")
+            navigator.mediaDevices
+                .getUserMedia(
+                // constraints - only audio needed for this app
+                    {
+                        audio: true,
+                    },
+                )
+                // Success callback
+                .then((stream) => {
+                    const mediaRecorder = new MediaRecorder(stream);
+                    let stopRecordingTimer, audioURL
+                    let chunks = []
+                    const stopRecording = () => {
+                        mediaRecorder.stop()
+                        startRecord.classList.remove("pulsing")
+                        if(stopRecordingTimer) clearTimeout(stopRecordingTimer)
+                        const blob = new Blob(chunks, { type: "audio/ogg; codecs=opus" })
+                        const file = new File([blob], "recorded_audio.ogg",
+                            {
+                                type: "audio/ogg", 
+                                lastModified: new Date().getTime(),
+                                size: blob.size
+                            }
+                        )
+                        chunks = []
+                        audioURL = window.URL.createObjectURL(blob)
+                        submitRecord.onclick = () => {
+                            const formData = new FormData();
+                            formData.append('image', file);
+                            formData.append("name", "recorded_audio.ogg");
+                            console.log(formData)
+
+                            // Your server endpoint to upload audio:
+                            const apiUrl = "http://localhost:3000/upload/audio";
+
+                            const response = fetch("submit", {
+                                method: 'POST',
+                                cache: 'no-cache',
+                                body: formData
+                            });
+                        }
+
+                        let recordedAudio = document.getElementById("recorded-audio")
+                        recordedAudio.classList.remove('d-none')
+
+                        let audio = document.createElement('audio')
+                        audio.controls = true
+                        let sourceEl = document.createElement('source')
+                        sourceEl.src = audioURL
+                        sourceEl.type = "audio/ogg"
+
+                        audio.appendChild(sourceEl)
+                        recordedAudio.appendChild(audio)
+                    }
+                    const startRecording = () => {
+                        console.log(window.URL)
+                        mediaRecorder.start(100)
+                        startRecord.classList.add("pulsing")
+                        if(stopRecordingTimer) clearTimeout(stopRecordingTimer)
+                        const input = document.getElementById("recorded-audio-input")
+                        if(input) input.parentElement.removeChild(input)
+                        
+                        let recordedAudio = document.getElementById("recorded-audio")
+                        if(recordedAudio.children.length != 0) {
+                            recordedAudio.removeChild(recordedAudio.children[0])
+                            window.URL.revokeObjectURL(audioURL)
+                            chunks = []
+                        }
+
+                        mediaRecorder.ondataavailable = (e) => {
+                            chunks.push(e.data);
+                        };
+                        stopRecordingTimer = setTimeout(stopRecording, 5000)
+                    }
+                    startRecord.onclick = () => {
+                        if(mediaRecorder.state != "recording") {
+                            startRecording()
+                        } else {
+                            stopRecording()
+                        }
+                    }
+                })
+                // Error callback
+                .catch((err) => {
+                    console.error(`The following getUserMedia error occurred: ${err}`)
+                })
+        } else {
+        console.log("getUserMedia not supported on your browser!");
+        }
+        function submitRecordedAudio() {
+            let form = document.getElementById('recorded-audio-form')
+            let data = new FormData(form)
+            fetch('submit', {
+                method: 'POST',
+                body: data
+            }).then(res => {
+                res.json().then(result => {
+                    let alert = document.getElementById('alert')
+                    let innerText, src
+                    alert.classList.remove('d-none')
+                    if(result.ok) {
+                        innerText = `Upload success!\nName: ${result.name}\nImage: ${result.image}`
+                        src = result.image.map(img => `/uploads/${img}`)
+                        alert.classList.add("alert-success")
+                    }
+                    else {
+                        innerText = result.message
+                        src = []
+                        alert.classList.add("alert-warning")
+                    }
+                    alert.children[0].innerText = innerText
+                    src.forEach(source => {
+                        if(result.fileType.includes("image/")) {
+                            let img = document.createElement('img')
+                            img.src = source
+                            img.width = 200
+                            alert.appendChild(img)
+                        } else if (result.fileType.includes("audio/")) {
+                            let audio = document.createElement('audio')
+                            audio.controls = true
+                            let sourceEl = document.createElement("source")
+                            sourceEl.src = source
+                            sourceEl.type = result.fileType
+                            audio.appendChild(sourceEl)
+                            alert.appendChild(audio)
+                        }
+                    });
+                    
+                    form.reset()
+                })
+            })
+            return false
+        }
+
+    </script>
+</body>
+</html>

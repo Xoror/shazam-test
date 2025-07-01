@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "njpwerner.autodocstring",
+        "formulahendry.code-runner",
+        "magicstack.magicpython",
+        "njqdev.vscode-python-typehint"
+    ]
+}

@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "dev": "parcel ./index.html",
+    "build": "parcel build ./index.html"
+  },
+  "dependencies": {
+    "extendable-media-recorder": "^9.2.26"
+  }
+}
